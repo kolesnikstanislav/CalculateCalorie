@@ -8,7 +8,7 @@ public:
     static constexpr double activityFactors[5] = { 1.2, 1.375, 1.55, 1.725, 1.9 };
 };
 
-// Определение статической constexpr переменной (требуется для линковки)
+// Определение статической constexpr переменной
 constexpr double Constants::activityFactors[5];
 
 // Класс пользователя
@@ -16,8 +16,8 @@ class User {
 public:
     std::string name;
     char gender;
-    double weight; // в кг
-    double height; // в см
+    double weight;
+    double height;
     int age;
     int activityIndex;
 
@@ -34,14 +34,14 @@ public:
     }
 };
 
-// Абстрактный BMR-калькулятор (паттерн Strategy)
+// Абстрактный класс BMR-калькулятора (паттерн Strategy)
 class BMRCalculator {
 public:
     virtual double calculate(const User& user) = 0;
     virtual ~BMRCalculator() {}
 };
 
-// Формула Миффлина-Сан Жеора
+// Реализация формулы Миффлина-Сан Жеора (конкретная стратегия)
 class MifflinStJeorCalculator : public BMRCalculator {
 public:
     double calculate(const User& user) override {
@@ -51,6 +51,19 @@ public:
         else {
             return 10 * user.weight + 6.25 * user.height - 5 * user.age - 161;
         }
+    }
+};
+
+// Паттерн Factory Method — для выбора BMR-калькулятора
+class BMRCalculatorFactory {
+public:
+    static BMRCalculator* createCalculator(const std::string& type) {
+        if (type == "mifflin") {
+            return new MifflinStJeorCalculator();
+        }
+
+        // Здесь можно добавить другие формулы
+        return nullptr;
     }
 };
 
@@ -94,7 +107,7 @@ public:
     }
 };
 
-// Вывод данных
+// Вывод результатов
 class OutputHandler {
 public:
     void printResult(const User& user, double calories) {
@@ -103,7 +116,7 @@ public:
     }
 };
 
-// Валидация данных
+// Проверка корректности введённых данных
 class Validator {
 public:
     static bool validateUser(const User& user) {
@@ -114,7 +127,7 @@ public:
     }
 };
 
-// Управляющий класс приложения
+// Главный класс приложения
 class App {
     User user;
     InputHandler input;
@@ -130,11 +143,19 @@ public:
             return;
         }
 
-        MifflinStJeorCalculator bmr;
-        CalorieCalculator calculator(&bmr);
-        double totalCalories = calculator.calculateTotal(user);
+        // Используем фабрику для получения нужной стратегии
+        BMRCalculator* bmr = BMRCalculatorFactory::createCalculator("mifflin");
 
+        if (!bmr) {
+            std::cout << "Ошибка при создании калькулятора BMR.\n";
+            return;
+        }
+
+        CalorieCalculator calculator(bmr);
+        double totalCalories = calculator.calculateTotal(user);
         output.printResult(user, totalCalories);
+
+        delete bmr;  // освобождение памяти
     }
 };
 
