@@ -1,68 +1,146 @@
 ﻿#include <iostream>
 #include <string>
+#include <limits>
 
-using namespace std;
-
-// Перечисление уровней активности
-enum ActivityLevel {
-    SEDENTARY = 1,     // Малоподвижный образ жизни
-    LIGHT,             // Небольшая активность
-    MODERATE,          // Умеренная активность
-    ACTIVE,            // Активный образ жизни
-    VERY_ACTIVE        // Очень активный
+// Класс для хранения констант
+class Constants {
+public:
+    static constexpr double activityFactors[5] = { 1.2, 1.375, 1.55, 1.725, 1.9 };
 };
 
-// Функция расчета базового обмена веществ по формуле Миффлина-Сан Жеора
-double calculateBMR(char gender, double weight, double height, int age) {
-    if (gender == 'M' || gender == 'm') {
-        return 10 * weight + 6.25 * height - 5 * age + 5;
-    }
-    else {
-        return 10 * weight + 6.25 * height - 5 * age - 161;
-    }
-}
+// Определение статической constexpr переменной (требуется для линковки)
+constexpr double Constants::activityFactors[5];
 
-// Функция для получения коэффициента активности
-double getActivityFactor(ActivityLevel level) {
-    switch (level) {
-    case SEDENTARY: return 1.2;
-    case LIGHT: return 1.375;
-    case MODERATE: return 1.55;
-    case ACTIVE: return 1.725;
-    case VERY_ACTIVE: return 1.9;
-    default: return 1.0;
-    }
-}
-
-int main() {
+// Класс пользователя
+class User {
+public:
+    std::string name;
     char gender;
-    double weight, height;
-    int age, activityChoice;
+    double weight; // в кг
+    double height; // в см
+    int age;
+    int activityIndex;
 
-    cout << "Калькулятор калорий\n";
-    cout << "Введите ваш пол (M/F): ";
-    cin >> gender;
-    cout << "Введите ваш вес (в кг): ";
-    cin >> weight;
-    cout << "Введите ваш рост (в см): ";
-    cin >> height;
-    cout << "Введите ваш возраст: ";
-    cin >> age;
+    User() : gender('M'), weight(0), height(0), age(0), activityIndex(0) {}
+};
 
-    cout << "\nВыберите уровень вашей активности:\n";
-    cout << "1. Малоподвижный образ жизни\n";
-    cout << "2. Легкая активность (спорт 1-3 раза в неделю)\n";
-    cout << "3. Умеренная активность (спорт 3-5 раз в неделю)\n";
-    cout << "4. Активный образ жизни (спорт 6-7 раз в неделю)\n";
-    cout << "5. Очень активный (интенсивные тренировки или физическая работа)\n";
-    cout << "Ваш выбор (1-5): ";
-    cin >> activityChoice;
+// Уровень активности
+class ActivityLevel {
+public:
+    static double getFactor(int index) {
+        if (index >= 0 && index < 5)
+            return Constants::activityFactors[index];
+        return 1.0;
+    }
+};
 
-    ActivityLevel level = static_cast<ActivityLevel>(activityChoice);
-    double bmr = calculateBMR(gender, weight, height, age);
-    double totalCalories = bmr * getActivityFactor(level);
+// Абстрактный BMR-калькулятор (паттерн Strategy)
+class BMRCalculator {
+public:
+    virtual double calculate(const User& user) = 0;
+    virtual ~BMRCalculator() {}
+};
 
-    cout << "\nВаша суточная норма калорий: " << totalCalories << " ккал" << endl;
+// Формула Миффлина-Сан Жеора
+class MifflinStJeorCalculator : public BMRCalculator {
+public:
+    double calculate(const User& user) override {
+        if (user.gender == 'M' || user.gender == 'm') {
+            return 10 * user.weight + 6.25 * user.height - 5 * user.age + 5;
+        }
+        else {
+            return 10 * user.weight + 6.25 * user.height - 5 * user.age - 161;
+        }
+    }
+};
 
+// Калькулятор калорий
+class CalorieCalculator {
+    BMRCalculator* bmrCalculator;
+
+public:
+    CalorieCalculator(BMRCalculator* calculator) : bmrCalculator(calculator) {}
+
+    double calculateTotal(const User& user) {
+        double bmr = bmrCalculator->calculate(user);
+        return bmr * ActivityLevel::getFactor(user.activityIndex);
+    }
+};
+
+// Ввод данных
+class InputHandler {
+public:
+    void fillUser(User& user) {
+        std::cout << "Введите имя: ";
+        std::getline(std::cin, user.name);
+
+        std::cout << "Введите пол (M/F): ";
+        std::cin >> user.gender;
+
+        std::cout << "Введите вес (в кг): ";
+        std::cin >> user.weight;
+
+        std::cout << "Введите рост (в см): ";
+        std::cin >> user.height;
+
+        std::cout << "Введите возраст: ";
+        std::cin >> user.age;
+
+        std::cout << "Выберите уровень активности (0-4):\n";
+        std::cout << "0. Малоподвижный\n1. Легкая активность\n2. Умеренная\n3. Активный\n4. Очень активный\n";
+        std::cin >> user.activityIndex;
+
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    }
+};
+
+// Вывод данных
+class OutputHandler {
+public:
+    void printResult(const User& user, double calories) {
+        std::cout << "\nПривет, " << user.name << "!\n";
+        std::cout << "Ваша суточная норма калорий: " << calories << " ккал\n";
+    }
+};
+
+// Валидация данных
+class Validator {
+public:
+    static bool validateUser(const User& user) {
+        return (user.weight > 0 && user.height > 0 && user.age > 0 &&
+            (user.gender == 'M' || user.gender == 'F' ||
+                user.gender == 'm' || user.gender == 'f') &&
+            user.activityIndex >= 0 && user.activityIndex < 5);
+    }
+};
+
+// Управляющий класс приложения
+class App {
+    User user;
+    InputHandler input;
+    OutputHandler output;
+    Validator validator;
+
+public:
+    void run() {
+        input.fillUser(user);
+
+        if (!validator.validateUser(user)) {
+            std::cout << "Ошибка ввода данных. Попробуйте снова.\n";
+            return;
+        }
+
+        MifflinStJeorCalculator bmr;
+        CalorieCalculator calculator(&bmr);
+        double totalCalories = calculator.calculateTotal(user);
+
+        output.printResult(user, totalCalories);
+    }
+};
+
+// Точка входа
+int main() {
+    App app;
+    app.run();
     return 0;
 }
