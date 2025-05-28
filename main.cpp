@@ -1,12 +1,9 @@
-﻿#include "app.h"
-#include <windows.h>
+#include <QApplication>
+#include "mainwindow.h"
 
-int main() {
-
-    SetConsoleCP(1251);           
-    SetConsoleOutputCP(1251);     
-
-    App app;
-    app.run();
-    return 0;
+int main(int argc, char *argv[]) {
+    QApplication app(argc, argv);
+    MainWindow window;
+    window.show();
+    return app.exec();
 }

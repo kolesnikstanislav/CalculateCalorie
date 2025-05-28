@@ -1,6 +1,5 @@
 #pragma once
-#include "user.h"
-#include "activity.h"
+#include "logic.h"
 
 class BMRCalculator {
 public:
@@ -49,10 +48,8 @@ class CalorieCalculator {
     BMRCalculator* bmrCalculator;
 
 public:
-    CalorieCalculator(BMRCalculator* calculator) : bmrCalculator(calculator) {}
-
+    CalorieCalculator(BMRCalculator* calc) : bmrCalculator(calc) {}
     double calculateTotal(const User& user) {
-        double bmr = bmrCalculator->calculate(user);
-        return bmr * ActivityLevel::getFactor(user.activityIndex);
+        return bmrCalculator->calculate(user) * ActivityLevel::getFactor(user.activityIndex);
     }
 };
