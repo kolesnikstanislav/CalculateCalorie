@@ -1,15 +1,23 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
-#include <QString>
+
+#include "user.h"
+#include "logic.h"
+#include "bmr_factory.h"
+#include "calorie_calculator.h"
+
 #include <QMessageBox>
 #include <QFile>
 #include <QTextStream>
+#include <QRegularExpression>
+#include <QComboBox>
+#include <QPushButton>
+#include <QTextEdit>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow) {
     ui->setupUi(this);
 
-    // Активность
     ui->activityBox->addItems({
         "Малоподвижный",
         "Легкая активность",
@@ -18,14 +26,13 @@ MainWindow::MainWindow(QWidget *parent)
         "Очень активный"
     });
 
-    // Формулы
     ui->formulaBox->addItems({
         "Mifflin-St Jeor",
         "Harris-Benedict",
         "Katch-McArdle"
     });
 
-    // Цели
+    ui->goalBox->clear();
     ui->goalBox->addItems({
         "Похудение",
         "Поддержание",
@@ -33,17 +40,53 @@ MainWindow::MainWindow(QWidget *parent)
     });
     ui->goalBox->setCurrentIndex(1);
 
-    // Сигналы
     connect(ui->goalBox, &QComboBox::currentTextChanged, this, &MainWindow::onGoalChanged);
     connect(ui->calculateButton, &QPushButton::clicked, this, &MainWindow::onCalculateClicked);
     connect(ui->mealCalcButton, &QPushButton::clicked, this, &MainWindow::onMealCalculateClicked);
 
-    // Инициализация
+    connect(ui->weightEdit, &QLineEdit::textChanged, this, [=] {
+        validateNumericInput(ui->weightEdit, true);
+    });
+    connect(ui->heightEdit, &QLineEdit::textChanged, this, [=] {
+        validateNumericInput(ui->heightEdit, true);
+    });
+    connect(ui->ageEdit, &QLineEdit::textChanged, this, [=] {
+        validateNumericInput(ui->ageEdit, false);
+    });
+    connect(ui->leanMassEdit, &QLineEdit::textChanged, this, [=] {
+        validateNumericInput(ui->leanMassEdit, true);
+    });
+    connect(ui->nameEdit, &QLineEdit::textChanged, this, [=] {
+        validateNameInput(ui->nameEdit);
+    });
+
     onGoalChanged(ui->goalBox->currentText());
 }
 
 MainWindow::~MainWindow() {
     delete ui;
+}
+
+void MainWindow::validateNumericInput(QLineEdit *edit, bool allowDecimal) {
+    QString text = edit->text();
+    QRegularExpression regex(allowDecimal ? "^\\d*\\.?\\d*$" : "^\\d+$");
+
+    if (!regex.match(text).hasMatch()) {
+        edit->setStyleSheet("border: 1px solid red;");
+    } else {
+        edit->setStyleSheet("");
+    }
+}
+
+void MainWindow::validateNameInput(QLineEdit *edit) {
+    QString text = edit->text();
+    QRegularExpression regex("^[А-Яа-яA-Za-z\\s\\-]+$");
+
+    if (!regex.match(text).hasMatch()) {
+        edit->setStyleSheet("border: 1px solid red;");
+    } else {
+        edit->setStyleSheet("");
+    }
 }
 
 double MainWindow::getActivityFactor(int index) {
@@ -65,10 +108,17 @@ void MainWindow::onGoalChanged(const QString &goal) {
 }
 
 void MainWindow::onCalculateClicked() {
+    QString name = ui->nameEdit->text().trimmed();
     QString genderStr = ui->genderBox->currentText();
     QString formula = ui->formulaBox->currentText();
     QString goal = ui->goalBox->currentText();
     int percent = ui->adjustSpin->value();
+
+    QRegularExpression nameRegex("^[А-Яа-яA-Za-z\\s\\-]+$");
+    if (!nameRegex.match(name).hasMatch()) {
+        QMessageBox::warning(this, "Ошибка", "Введите корректное имя (только буквы).");
+        return;
+    }
 
     bool ok1, ok2, ok3, ok4;
     double weight = ui->weightEdit->text().toDouble(&ok1);
@@ -78,31 +128,35 @@ void MainWindow::onCalculateClicked() {
     int activityIndex = ui->activityBox->currentIndex();
 
     if (!ok1 || !ok2 || !ok3 || (!ok4 && formula == "Katch-McArdle")) {
-        QMessageBox::warning(this, "Ошибка", "Пожалуйста, введите корректные данные.");
+        QMessageBox::warning(this, "Ошибка", "Пожалуйста, введите корректные числовые данные.");
         return;
     }
 
-    double bmr = 0;
-    if (formula == "Mifflin-St Jeor") {
-        bmr = (genderStr == "M")
-        ? 10 * weight + 6.25 * height - 5 * age + 5
-        : 10 * weight + 6.25 * height - 5 * age - 161;
-    } else if (formula == "Harris-Benedict") {
-        bmr = (genderStr == "M")
-        ? 66.47 + 13.75 * weight + 5.003 * height - 6.755 * age
-        : 655.1 + 9.563 * weight + 1.850 * height - 4.676 * age;
-    } else if (formula == "Katch-McArdle") {
-        if (leanMass <= 0) leanMass = 50.0;
-        bmr = 370 + 21.6 * leanMass;
+    User user{name.toStdString(), genderStr.toStdString()[0], weight, height, age, activityIndex, leanMass};
+    if (leanMass <= 0 && formula == "Katch-McArdle")
+        user.leanMass = Settings::getInstance()->getDefaultLeanMass();
+
+    std::string type;
+    if (formula == "Mifflin-St Jeor") type = "mifflin";
+    else if (formula == "Harris-Benedict") type = "harris";
+    else if (formula == "Katch-McArdle") type = "katch";
+
+    BMRCalculator* calculator = BMRCalculatorFactory::createCalculator(type);
+    if (!calculator) {
+        QMessageBox::critical(this, "Ошибка", "Не удалось создать калькулятор.");
+        return;
     }
 
-    double totalCalories = bmr * getActivityFactor(activityIndex);
+    CalorieCalculator calorieCalculator(calculator);
+    double totalCalories = calorieCalculator.calculateTotal(user);
 
     if (goal == "Похудение") {
         totalCalories -= totalCalories * percent / 100.0;
     } else if (goal == "Набор массы") {
         totalCalories += totalCalories * percent / 100.0;
     }
+
+    delete calculator;
 
     ui->resultLabel->setText("Суточная норма калорий: " +
                              QString::number(totalCalories, 'f', 1) + " ккал");
@@ -141,7 +195,7 @@ int MainWindow::calculateMealCalories(const QStringList &meals, const QMap<QStri
 }
 
 void MainWindow::onMealCalculateClicked() {
-    QString path = "food_calories.txt";  // 🔗 файл должен лежать рядом с .exe
+    QString path = "food_calories.txt";
     QMap<QString, int> table = loadCaloriesFromFile(path);
 
     QStringList breakfast = ui->breakfastEdit->toPlainText().split(',', Qt::SkipEmptyParts);

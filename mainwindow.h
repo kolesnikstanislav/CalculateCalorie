@@ -1,9 +1,9 @@
-#ifndef MAINWINDOW_H
-#define MAINWINDOW_H
+#pragma once
 
 #include <QMainWindow>
 #include <QMap>
 #include <QStringList>
+#include <QLineEdit>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -17,18 +17,17 @@ public:
     ~MainWindow();
 
 private slots:
-    void onCalculateClicked();            // расчет суточной нормы калорий
-    void onGoalChanged(const QString &);  // обработка цели (похудение и т.д.)
-    void onMealCalculateClicked();        // расчет калорий по еде
+    void onCalculateClicked();
+    void onGoalChanged(const QString &);
+    void onMealCalculateClicked();
+
+    void validateNumericInput(QLineEdit *edit, bool allowDecimal);
+    void validateNameInput(QLineEdit *edit);
 
 private:
     Ui::MainWindow *ui;
 
-    double getActivityFactor(int index);  // возвращает коэффициент активности
-
-    // работа с таблицей продуктов
+    double getActivityFactor(int index);
     QMap<QString, int> loadCaloriesFromFile(const QString &filePath);
     int calculateMealCalories(const QStringList &meals, const QMap<QString, int> &table);
 };
-
-#endif // MAINWINDOW_H
